@@ -56,4 +56,44 @@ export class SessionsService {
       embeddingDimensions: embedding.length,
     };
   }
+
+  async getAllSessions() {
+    const sessions = await this.storageService.getAllSessions();
+    
+    return sessions.map(session => ({
+      id: session.id,
+      originalFilename: session.originalFilename,
+      mimetype: session.mimetype,
+      size: session.size,
+      path: session.audioPath,
+      status: 'transcribed',
+      rawTranscript: session.rawTranscript,
+      transcript: session.transcript,
+      summary: session.summary,
+      embeddingDimensions: session.embedding?.length || 0,
+      createdAt: session.timestamp,
+    }));
+  }
+
+  async getSessionById(id: string) {
+    const session = await this.storageService.getSessionById(id);
+    
+    if (!session) {
+      throw new BadRequestException('Session not found');
+    }
+
+    return {
+      id: session.id,
+      originalFilename: session.originalFilename,
+      mimetype: session.mimetype,
+      size: session.size,
+      path: session.audioPath,
+      status: 'transcribed',
+      rawTranscript: session.rawTranscript,
+      transcript: session.transcript,
+      summary: session.summary,
+      embeddingDimensions: session.embedding?.length || 0,
+      createdAt: session.timestamp,
+    };
+  }
 }

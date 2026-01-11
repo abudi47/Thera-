@@ -11,6 +11,21 @@ export interface Session {
   summary: string
   embeddingDimensions: number
   createdAt?: string
+  timestamp?: string
+}
+
+// Upload response from backend
+export interface UploadResponse {
+  id: string
+  originalFilename: string
+  mimetype: string
+  size: number
+  path: string
+  status: "transcribed"
+  rawTranscript: string
+  transcript: string
+  summary: string
+  embeddingDimensions: number
 }
 
 // Parsed transcript entry for display

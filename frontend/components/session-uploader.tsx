@@ -7,25 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, FileAudio, Loader2, AlertCircle, CloudUpload } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Session } from "@/lib/types"
-
-// Response type from the backend
-interface SessionResponse {
-  transcript: TranscriptEntry[]
-  summary: string
-  status: {
-    transcribed: boolean
-    speakersIdentified: boolean
-    summaryGenerated: boolean
-  }
-}
-
-// Individual transcript entry with speaker label
-interface TranscriptEntry {
-  speaker: string
-  text: string
-  timestamp?: string
-}
+import type { UploadResponse } from "@/lib/types"
 
 export function SessionUploader() {
   const router = useRouter()
@@ -104,7 +86,7 @@ export function SessionUploader() {
         throw new Error(errorData.error || `Upload failed: ${res.statusText}`)
       }
 
-      const data: Session = await res.json()
+      const data: UploadResponse = await res.json()
 
       // Navigate to the session detail page
       router.push(`/sessions/${data.id}`)

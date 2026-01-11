@@ -1,6 +1,8 @@
 import {
   Controller,
+  Get,
   Post,
+  Param,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -16,5 +18,15 @@ export class SessionsController {
   @UseInterceptors(FileInterceptor('audio', multerConfig))
   uploadAudio(@UploadedFile() file: Express.Multer.File) {
     return this.sessionsService.handleAudioUpload(file);
+  }
+
+  @Get()
+  getAllSessions() {
+    return this.sessionsService.getAllSessions();
+  }
+
+  @Get(':id')
+  getSessionById(@Param('id') id: string) {
+    return this.sessionsService.getSessionById(id);
   }
 }
