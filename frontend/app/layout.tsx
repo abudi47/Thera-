@@ -11,7 +11,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Therapy Session Processor",
   description: "Upload audio files to generate transcripts and summaries",
-  generator: "v0.app",
+  generator: "Thera-project-frontend",
   icons: {
     icon: [
       {
