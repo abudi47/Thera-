@@ -1,0 +1,45 @@
+generat
+ed/
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Build / output
+dist/
+build/
+tmp/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Uploads (temporary audio files)
+uploads/
+!uploads/.gitkeep
+
+# Sessions data (if using JSON storage)
+sessions-data/
+!sessions-data/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
