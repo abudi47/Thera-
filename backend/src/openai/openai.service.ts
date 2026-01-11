@@ -51,4 +51,42 @@ export class OpenAIService {
       throw new Error('Speaker labeling failed');
     }
   }
+
+  async summarizeTranscript(labeledTranscript: string): Promise<string> {
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that summarizes therapy session transcripts. Generate a concise summary that captures the main topics discussed, client concerns, and key therapeutic interventions. Keep the summary contextually accurate and professional. Use 3-5 sentences.',
+          },
+          {
+            role: 'user',
+            content: `Please summarize this therapy session transcript:\n\n${labeledTranscript}`,
+          },
+        ],
+        temperature: 0.5,
+      });
+
+      return response.choices[0].message.content || 'Summary generation failed';
+    } catch (err) {
+      console.error('OpenAI summarization error:', err);
+      throw new Error('Summarization failed');
+    }
+  }
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    try {
+      const response = await this.openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: text,
+      });
+
+      return response.data[0].embedding;
+    } catch (err) {
+      console.error('OpenAI embedding error:', err);
+      throw new Error('Embedding generation failed');
+    }
+  }
 }

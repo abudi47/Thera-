@@ -1,9 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { OpenAIService } from '../openai/openai.service';
+import { SessionStorageService, SessionData } from './session-storage.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class SessionsService {
-  constructor(private readonly openaiService: OpenAIService) {}
+  constructor(
+    private readonly openaiService: OpenAIService,
+    private readonly storageService: SessionStorageService,
+  ) {}
 
   async handleAudioUpload(file: Express.Multer.File) {
     if (!file) {
@@ -16,7 +21,30 @@ export class SessionsService {
     // Step 2: Label speakers using LLM
     const labeledTranscript = await this.openaiService.labelSpeakers(rawTranscript);
 
+    // Step 3: Generate summary
+    const summary = await this.openaiService.summarizeTranscript(labeledTranscript);
+
+    // Step 4: Generate embedding for semantic search
+    const embedding = await this.openaiService.generateEmbedding(summary);
+
+    // Step 5: Store session data with embeddings
+    const sessionData: SessionData = {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      originalFilename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      audioPath: file.path,
+      rawTranscript,
+      transcript: labeledTranscript,
+      summary,
+      embedding,
+    };
+
+    await this.storageService.saveSession(sessionData);
+
     return {
+      id: sessionData.id,
       originalFilename: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
@@ -24,6 +52,8 @@ export class SessionsService {
       status: 'transcribed',
       rawTranscript,
       transcript: labeledTranscript,
+      summary,
+      embeddingDimensions: embedding.length,
     };
   }
 }
