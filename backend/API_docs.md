@@ -36,7 +36,7 @@ curl http://localhost:3000
 
 **Endpoint:** `POST /sessions/upload`
 
-**Description:** Upload an audio file for temporary storage. The file is saved to the `./uploads/` directory with a unique timestamped filename.
+**Description:** Upload an audio file for temporary storage and transcription with OpenAI Whisper. The file is saved to the `./uploads/` directory with a unique timestamped filename, then transcribed.
 
 **Content-Type:** `multipart/form-data`
 
@@ -56,14 +56,17 @@ curl -X POST http://localhost:3000/sessions/upload \
 4. Add field named `audio` with type "File"
 5. Browse and select your audio file
 
+
 **Success Response (200):**
 ```json
 {
-  "originalFilename": "upp.mp3",
-  "mimetype": "audio/mpeg",
-  "size": 498816,
-  "path": "uploads/audio-1736591238123-456789012.mp3",
-  "status": "received"
+   "originalFilename": "upp.mp3",
+   "mimetype": "audio/mpeg",
+   "size": 498816,
+   "path": "uploads/audio-1736591238123-456789012.mp3",
+   "status": "transcribed",
+   "rawTranscript": "How have you been feeling lately?\nI've been feeling anxious and not sleeping well.\nWhat do you think is contributing to that?\nWork stress mostly.",
+   "transcript": "Speaker A (Therapist): How have you been feeling lately?\nSpeaker B (Client): I've been feeling anxious and not sleeping well.\nSpeaker A (Therapist): What do you think is contributing to that?\nSpeaker B (Client): Work stress mostly."
 }
 ```
 
@@ -72,7 +75,9 @@ curl -X POST http://localhost:3000/sessions/upload \
 - `mimetype` (string) - The MIME type of the file (e.g., `audio/mpeg`, `audio/wav`)
 - `size` (number) - File size in bytes
 - `path` (string) - The server path where the file is stored
-- `status` (string) - Upload status, always `"received"`
+- `status` (string) - Upload status, `"transcribed"` when Whisper completes
+- `rawTranscript` (string) - Raw text produced by OpenAI Whisper (no speaker labels)
+- `transcript` (string) - Speaker-labeled transcript (LLM formatted)
 
 **Error Response (400 Bad Request):**
 ```json
@@ -92,7 +97,8 @@ curl -X POST http://localhost:3000/sessions/upload \
 
 ## Workflow
 
-### Audio Upload Flow
+
+### Audio Upload & Speaker Labeling Flow
 ```
 1. Client prepares audio file (MP3, WAV, etc.)
    ↓
@@ -109,9 +115,13 @@ curl -X POST http://localhost:3000/sessions/upload \
    ↓
 6. SessionsService validates file exists
    ↓
-7. SessionsService returns file metadata
+7. SessionsService transcribes audio to text (raw transcript)
    ↓
-8. Client receives JSON response with file info
+8. SessionsService sends transcript to LLM for speaker labeling
+   ↓
+9. SessionsService returns file metadata, raw transcript, and speaker-labeled transcript
+   ↓
+10. Client receives JSON response with file info, raw transcript, and labeled transcript
 ```
 
 ### File Storage
@@ -120,6 +130,26 @@ curl -X POST http://localhost:3000/sessions/upload \
 - **Example:** `audio-1736591238123-456789012.mp3`
 - **Purpose:** Temporary storage for processing
 - **Git:** Files in `./uploads/` are ignored (see `.gitignore`)
+
+---
+
+
+## Transcription & Speaker Labeling
+
+- **Transcription Service:** `OpenAIService.transcribeAudio()`
+- **Speaker Labeling Service:** `OpenAIService.labelSpeakers()`
+- **Transcription Model:** `whisper-1`
+- **Speaker Labeling Model:** `gpt-4`
+- **Input:** The saved file path from Multer disk storage
+- **Flow:**
+   1. Multer writes the uploaded audio to `./uploads/`.
+   2. `SessionsService.handleAudioUpload()` validates the file.
+   3. `OpenAIService.transcribeAudio()` streams the file from disk to OpenAI Whisper.
+   4. Whisper returns raw text transcript.
+   5. `OpenAIService.labelSpeakers()` sends the raw transcript to GPT-4 for speaker labeling.
+   6. Service responds with `status: "transcribed"`, `rawTranscript`, and `transcript` (speaker-labeled).
+- **Environment:** Requires `OPENAI_API_KEY` in `.env`.
+- **Limitations:** Speaker labeling is based on LLM inference and may not be perfect for all audio types.
 
 ---
 
