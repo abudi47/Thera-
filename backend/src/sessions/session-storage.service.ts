@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { promises as fs } from 'fs';
-import { join } from 'path';
+import { SupabaseService } from '../supabase/supabase.service';
 
 export interface SessionData {
   id: string;
@@ -17,42 +16,31 @@ export interface SessionData {
 
 @Injectable()
 export class SessionStorageService {
-  private readonly storageDir = join(process.cwd(), 'sessions-data');
-  private readonly indexFile = join(this.storageDir, 'sessions-index.json');
-
-  constructor() {
-    this.initializeStorage();
-  }
-
-  private async initializeStorage() {
-    try {
-      await fs.mkdir(this.storageDir, { recursive: true });
-      
-      try {
-        await fs.access(this.indexFile);
-      } catch {
-        await fs.writeFile(this.indexFile, JSON.stringify([], null, 2));
-      }
-    } catch (err) {
-      console.error('Storage initialization error:', err);
-    }
-  }
+  constructor(private readonly supabaseService: SupabaseService) {}
 
   async saveSession(sessionData: SessionData): Promise<void> {
     try {
-      // Read existing sessions
-      const indexContent = await fs.readFile(this.indexFile, 'utf-8');
-      const sessions: SessionData[] = JSON.parse(indexContent);
+      const supabase = this.supabaseService.getClient();
 
-      // Add new session
-      sessions.push(sessionData);
+      const { error } = await supabase
+        .from('therapy_sessions')
+        .insert({
+          id: sessionData.id,
+          timestamp: sessionData.timestamp,
+          original_filename: sessionData.originalFilename,
+          mimetype: sessionData.mimetype,
+          file_size: sessionData.size,
+          audio_path: sessionData.audioPath,
+          raw_transcript: sessionData.rawTranscript,
+          transcript: sessionData.transcript,
+          summary: sessionData.summary,
+          embedding: sessionData.embedding,
+        });
 
-      // Write back to index
-      await fs.writeFile(this.indexFile, JSON.stringify(sessions, null, 2));
-
-      // Save individual session file for easier retrieval
-      const sessionFile = join(this.storageDir, `${sessionData.id}.json`);
-      await fs.writeFile(sessionFile, JSON.stringify(sessionData, null, 2));
+      if (error) {
+        console.error('Supabase save error:', error);
+        throw new Error(`Failed to save session: ${error.message}`);
+      }
     } catch (err) {
       console.error('Session save error:', err);
       throw new Error('Failed to save session data');
@@ -61,8 +49,30 @@ export class SessionStorageService {
 
   async getAllSessions(): Promise<SessionData[]> {
     try {
-      const indexContent = await fs.readFile(this.indexFile, 'utf-8');
-      return JSON.parse(indexContent);
+      const supabase = this.supabaseService.getClient();
+
+      const { data, error } = await supabase
+        .from('therapy_sessions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error('Supabase retrieval error:', error);
+        return [];
+      }
+
+      return data.map((row) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        originalFilename: row.original_filename,
+        mimetype: row.mimetype,
+        size: row.file_size,
+        audioPath: row.audio_path,
+        rawTranscript: row.raw_transcript,
+        transcript: row.transcript,
+        summary: row.summary,
+        embedding: row.embedding,
+      }));
     } catch (err) {
       console.error('Session retrieval error:', err);
       return [];
@@ -71,11 +81,68 @@ export class SessionStorageService {
 
   async getSessionById(id: string): Promise<SessionData | null> {
     try {
-      const sessionFile = join(this.storageDir, `${id}.json`);
-      const content = await fs.readFile(sessionFile, 'utf-8');
-      return JSON.parse(content);
+      const supabase = this.supabaseService.getClient();
+
+      const { data, error } = await supabase
+        .from('therapy_sessions')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return {
+        id: data.id,
+        timestamp: data.timestamp,
+        originalFilename: data.original_filename,
+        mimetype: data.mimetype,
+        size: data.file_size,
+        audioPath: data.audio_path,
+        rawTranscript: data.raw_transcript,
+        transcript: data.transcript,
+        summary: data.summary,
+        embedding: data.embedding,
+      };
     } catch (err) {
+      console.error('Session retrieval error:', err);
       return null;
     }
   }
+
+  async searchSimilarSessions(queryEmbedding: number[], limit: number = 5): Promise<SessionData[]> {
+    try {
+      const supabase = this.supabaseService.getClient();
+
+      // Using pgvector's cosine similarity
+      const { data, error } = await supabase.rpc('match_sessions', {
+        query_embedding: queryEmbedding,
+        match_threshold: 0.7,
+        match_count: limit,
+      });
+
+      if (error) {
+        console.error('Similarity search error:', error);
+        return [];
+      }
+
+      return data.map((row: any) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        originalFilename: row.original_filename,
+        mimetype: row.mimetype,
+        size: row.file_size,
+        audioPath: row.audio_path,
+        rawTranscript: row.raw_transcript,
+        transcript: row.transcript,
+        summary: row.summary,
+        embedding: row.embedding,
+      }));
+    } catch (err) {
+      console.error('Similarity search error:', err);
+      return [];
+    }
+  }
 }
+

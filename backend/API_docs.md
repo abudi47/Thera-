@@ -173,21 +173,41 @@ curl -X POST http://localhost:3000/sessions/upload \
 
 ## Session Storage & Vector Embeddings
 
-### Storage Structure
-- **Location:** `./sessions-data/`
-- **Index File:** `sessions-index.json` - Contains array of all sessions
-- **Individual Files:** `{session-id}.json` - Individual session data files
+### Database: Supabase (PostgreSQL + pgvector)
 
-### Session Data Format
+### Storage Structure
+- **Database:** PostgreSQL with pgvector extension
+- **Table:** `therapy_sessions`
+- **Vector Index:** IVFFlat index for cosine similarity search
+
+### Session Data Schema
+```sql
+CREATE TABLE therapy_sessions (
+  id UUID PRIMARY KEY,
+  timestamp TIMESTAMPTZ,
+  original_filename TEXT,
+  mimetype TEXT,
+  file_size INTEGER,
+  audio_path TEXT,
+  raw_transcript TEXT,
+  transcript TEXT,
+  summary TEXT,
+  embedding vector(1536),
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+);
+```
+
+### Example Session Record
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "timestamp": "2026-01-11T10:30:00.000Z",
-  "originalFilename": "therapy-session.mp3",
+  "original_filename": "therapy-session.mp3",
   "mimetype": "audio/mpeg",
-  "size": 498816,
-  "audioPath": "uploads/audio-1736591238123-456789012.mp3",
-  "rawTranscript": "How have you been feeling lately?...",
+  "file_size": 498816,
+  "audio_path": "uploads/audio-1736591238123-456789012.mp3",
+  "raw_transcript": "How have you been feeling lately?...",
   "transcript": "Speaker A (Therapist): How have you been feeling lately?...",
   "summary": "The client reported increased anxiety...",
   "embedding": [0.123, -0.456, 0.789, ...]
@@ -199,30 +219,69 @@ curl -X POST http://localhost:3000/sessions/upload \
 - **Model:** OpenAI `text-embedding-3-small`
 - **Dimensions:** 1536-dimensional vectors
 - **Input:** Session summary text
-- **Storage:** Stored as array of floats alongside session metadata
-- **Future Use:** Can be indexed for similarity search, semantic clustering, or retrieval-augmented generation (RAG)
+- **Storage:** PostgreSQL vector column with pgvector extension
+- **Index:** IVFFlat index for fast cosine similarity search
 
-### Semantic Search Design
-The architecture is designed to support future semantic search capabilities:
-- **Cosine Similarity:** Compare query embeddings with stored session embeddings
-- **Vector Database Migration:** Data can be exported to vector databases (Pinecone, Weaviate, ChromaDB)
-- **Query Pattern:** Convert search query → embedding → find similar sessions by vector similarity
-- **Use Cases:** "Find sessions about anxiety", "Sessions discussing work stress", "Similar client concerns"
+### Semantic Search Capabilities
+**Built-in Function:** `match_sessions(query_embedding, match_threshold, match_count)`
+
+**Example Usage:**
+```typescript
+// Search for sessions similar to a query
+const queryEmbedding = await openaiService.generateEmbedding("anxiety and sleep issues");
+const similarSessions = await storageService.searchSimilarSessions(queryEmbedding, 5);
+```
+
+**Query Pattern:**
+1. Convert search text → embedding using OpenAI API
+2. Call `match_sessions` function with query embedding
+3. Returns top N most similar sessions by cosine similarity
+4. Minimum similarity threshold: 0.7 (configurable)
+
+**Use Cases:**
+- "Find sessions about anxiety"
+- "Sessions discussing work stress"  
+- "Similar client concerns"
+- Pattern detection across sessions
+- Therapeutic insights analysis
 
 ---
 
 ## Technical Stack
 
 - **Framework:** NestJS
+- **Database:** Supabase (PostgreSQL + pgvector)
+- **Vector Search:** pgvector with cosine similarity
 - **File Upload:** Multer via `@nestjs/platform-express`
-- **Storage:** Disk storage (configurable in `multer.config.ts`)
-- **Session Storage:** JSON files (ready for vector database migration)
+- **Storage:** Disk storage for audio files
+- **Session Storage:** PostgreSQL with vector embeddings
 - **Language:** TypeScript
 - **Runtime:** Node.js
 
 ---
 
 ## Development
+
+### Prerequisites
+1. Node.js and npm installed
+2. OpenAI API key
+3. Supabase project set up (see [SUPABASE_SETUP.md](./SUPABASE_SETUP.md))
+
+### Environment Setup
+
+1. Copy `.env.example` to `.env` (or update existing `.env`):
+```env
+OPENAI_API_KEY=your-openai-api-key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Run database migrations (see [SUPABASE_SETUP.md](./SUPABASE_SETUP.md))
 
 ### Start Server
 ```bash
@@ -231,15 +290,24 @@ npm run start:dev
 
 ### Test Upload
 ```bash
-# Create test file
-echo "test audio content" > /tmp/test.mp3
-
-# Upload
+# Upload audio file
 curl -X POST http://localhost:3000/sessions/upload \
-  -F "audio=@/tmp/test.mp3"
+  -F "audio=@/path/to/audio.mp3"
 ```
 
-### View Uploaded Files
+### View Session Data
+
+**Option 1: Supabase Dashboard**
+1. Go to your Supabase project
+2. Click "Table Editor"
+3. Select `therapy_sessions` table
+
+**Option 2: Query via SQL Editor**
+```sql
+SELECT id, timestamp, summary FROM therapy_sessions ORDER BY timestamp DESC;
+```
+
+### View Uploaded Audio Files
 ```bash
 ls -lh uploads/
 ```
@@ -248,13 +316,31 @@ ls -lh uploads/
 
 ## Module Structure
 
-### SessionsModule
+### Core Modules
+
+**SupabaseModule** (Global)
+- **Service:** `supabase.service.ts` - Manages Supabase client connection
+- **Module:** `supabase.module.ts` - Global module exported to all other modules
+
+**SessionsModule**
 - **Controller:** `sessions.controller.ts` - Handles HTTP routing and file interception
-- **Service:** `sessions.service.ts` - Contains business logic and validation
-- **Config:** `multer.config.ts` - Configures disk storage and filename generation
-- **Module:** `sessions.module.ts` - Wires controller and service together
+- **Service:** `sessions.service.ts` - Orchestrates transcription, labeling, summarization, and storage
+- **Storage Service:** `session-storage.service.ts` - Handles Supabase database operations
+- **Config:** `multer.config.ts` - Configures disk storage for audio files
+- **Module:** `sessions.module.ts` - Wires all session-related components
+
+**OpenAIModule**
+- **Service:** `openai.service.ts` - Handles all OpenAI API interactions (Whisper, GPT-4, Embeddings)
+- **Module:** `openai.module.ts` - Exports OpenAI service
 
 ### File Responsibilities
-- **Controller:** Thin layer, uses `@UseInterceptors(FileInterceptor('audio'))` to capture uploads
-- **Service:** Validates file presence, returns structured response
-- **Config:** Defines storage destination and unique filename generation strategy
+- **Controller:** HTTP layer, file upload interception
+- **SessionsService:** Business logic orchestration
+- **SessionStorageService:** Database persistence with Supabase
+- **OpenAIService:** External API calls (transcription, labeling, summarization, embeddings)
+
+---
+
+## Database Setup
+
+See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for complete step-by-step Supabase configuration.
