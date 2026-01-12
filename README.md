@@ -186,5 +186,5 @@ Supabase project
 
 [⬆ Back to Top](#thera--ai-powered-therapy-session-processing)
 
-</div>ope)
+</div>
 
