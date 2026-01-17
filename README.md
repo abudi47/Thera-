@@ -1,4 +1,4 @@
-# Thera — AI-Powered Therapy Session Processing
+# Thera — AI-Powered Therapy Session Processingg
 
 <div align="center">
 
